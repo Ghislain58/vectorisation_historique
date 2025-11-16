@@ -14,8 +14,42 @@ mes_documents_historiques/
 vector_db_historique/
 debug_single/
 
-# Logs éventuels
+# =====================================
+# DATA - À NE PAS VERSIONNER
+# =====================================
+
+# Chunks JSONL (générés)
+data/chunks/
+*.jsonl
+
+# Index FAISS (générés)
+data/embeddings/
+*.faiss
+*index_ids.json
+
+# PDF sources
+data/sources/local/pdf/
+data/sources/bnf_gallica/pdf/
+*.pdf
+
+# =====================================
+# Fichiers générés / temporaires
+# =====================================
+
+*.tmp
+*.bak
+*.old
+*~
 *.log
+
+# =====================================
+# Scripts obsolètes
+# =====================================
+
+historical_vectorizerold.py
+historical_vectorizerok1.py
+debug_single_pdf.py
 
 # Divers
 wsl
+.ipynb_checkpoints/

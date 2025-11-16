@@ -13,6 +13,13 @@ from medieval_rag.ingestion.chunker import chunk_document
 from medieval_rag.embeddings.model_loader import load_embedding_model
 from medieval_rag.embeddings.embedder import Embedder
 
+# Nouveau : enrichissement des entités lexicales
+from medieval_rag.enrichment.entities import (
+    load_entity_lexicon,
+    _compile_lexicon_patterns,
+    enrich_chunk_record_with_entities,
+)
+
 
 def main():
     data_root = Path("data")
@@ -23,18 +30,28 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
     output_jsonl = output_dir / "corpus_chunks.jsonl"
 
-    print("🚀 Construction du corpus JSONL (RAG minimal)")
+    print("🚀 Construction du corpus JSONL (RAG enrichi)")
     print(f"📂 Dossiers PDF :")
     print(f"   - Local   : {local_pdf_dir}")
     print(f"   - Gallica : {gallica_pdf_dir}")
     print(f"📝 Fichier de sortie : {output_jsonl}")
 
-    # Charger le modèle d'embedding
+    # Charger modèle embeddings
     model, device = load_embedding_model(
         "intfloat/multilingual-e5-large",
         device="auto"
     )
     embedder = Embedder(model, max_batch_size=16)
+
+    # Charger le lexique d'entités (optionnel mais recommandé)
+    lexicon = load_entity_lexicon(base_path=Path("."))
+    lexicon_patterns = _compile_lexicon_patterns(lexicon)
+    use_entities = any(lexicon.values())
+
+    if use_entities:
+        print("📌 Enrichissement des chunks avec les entités activé.")
+    else:
+        print("ℹ️  Aucun lexique trouvé : enrichissement des entités désactivé.")
 
     nb_docs = 0
     nb_chunks_total = 0
@@ -68,12 +85,20 @@ def main():
                     "page_start": chunk["page_start"],
                     "page_end": chunk["page_end"],
                     "text": chunk["text"],
-                    # pas encore d'entités → on les ajoutera plus tard
                     "entities": None,
                     "year_min": None,
                     "year_max": None,
                     "embedding": emb,
                 }
+
+                # Enrichissement avec entités lexicales
+                if use_entities:
+                    try:
+                        record = enrich_chunk_record_with_entities(record, lexicon_patterns)
+                    except Exception as e:
+                        print(f"⚠️ Erreur enrichissement entités : {e}")
+
+                # Écriture JSONL
                 f_out.write(json.dumps(record, ensure_ascii=False) + "\n")
 
             nb_chunks_total += len(chunks)

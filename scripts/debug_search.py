@@ -14,19 +14,18 @@ from medieval_rag.embeddings.model_loader import load_embedding_model
 from medieval_rag.embeddings.embedder import Embedder
 
 
-def load_index(index_path: Path, ids_path: Path):
-    index = faiss.read_index(str(index_path))
-    with ids_path.open("r", encoding="utf-8") as f:
-        chunk_ids = json.load(f)
-    return index, chunk_ids
-
-
-def load_corpus_records(jsonl_path: Path):
+def load_corpus(jsonl_path: Path):
     """
-    Charge toutes les lignes du JSONL dans un dict :
-      chunk_id -> record complet
+    Charge corpus_chunks.jsonl en mémoire.
+    Retourne :
+      - records_by_id: dict chunk_id -> record
     """
-    records = {}
+    records_by_id = {}
+
+    if not jsonl_path.exists():
+        raise FileNotFoundError(f"Fichier JSONL introuvable : {jsonl_path}")
+
+    print(f"📂 Chargement du corpus : {jsonl_path}")
     with jsonl_path.open("r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
@@ -34,68 +33,145 @@ def load_corpus_records(jsonl_path: Path):
                 continue
             rec = json.loads(line)
             cid = rec.get("chunk_id")
-            if cid:
-                records[cid] = rec
-    return records
+            if not cid:
+                continue
+            records_by_id[cid] = rec
+
+    print(f"   → {len(records_by_id)} chunks chargés")
+    return records_by_id
+
+
+def load_faiss_index(index_path: Path, ids_path: Path):
+    """
+    Charge l'index FAISS et la liste des chunk_ids correspondants.
+    """
+    if not index_path.exists():
+        raise FileNotFoundError(f"Index FAISS introuvable : {index_path}")
+    if not ids_path.exists():
+        raise FileNotFoundError(f"Fichier d'IDs introuvable : {ids_path}")
+
+    print(f"📦 Chargement index FAISS : {index_path}")
+    index = faiss.read_index(str(index_path))
+
+    print(f"📄 Chargement IDs : {ids_path}")
+    with ids_path.open("r", encoding="utf-8") as f:
+        ids_list = json.load(f)
+
+    print(f"   → {len(ids_list)} IDs chargés, {index.ntotal} vecteurs dans l'index.")
+    if len(ids_list) != index.ntotal:
+        print("⚠️  Mismatch entre nombre d'IDs et nombre de vecteurs FAISS !")
+
+    return index, ids_list
+
+
+def pretty_print_result(rank, score, rec):
+    """
+    Affiche un chunk de manière lisible, avec entités si présentes.
+    """
+    doc_id = rec.get("doc_id")
+    source = rec.get("source")
+    title = rec.get("title")
+    page_start = rec.get("page_start")
+    page_end = rec.get("page_end")
+    entities = rec.get("entities") or {}
+    year_min = rec.get("year_min")
+    year_max = rec.get("year_max")
+
+    text_preview = (rec.get("text") or "").replace("\n", " ")
+    if len(text_preview) > 300:
+        text_preview = text_preview[:300] + "..."
+
+    print(f"\n=== Résultat #{rank} — score={score:.4f} ===")
+    print(f"📚 Doc   : {doc_id} ({source})")
+    if title:
+        print(f"📝 Titre : {title}")
+    print(f"📄 Pages : {page_start}–{page_end}")
+
+    # Entités
+    persons = entities.get("persons") or []
+    places = entities.get("places") or []
+    years = entities.get("years") or []
+
+    if persons or places or years or (year_min is not None or year_max is not None):
+        print("🔎 Entités détectées :")
+        if persons:
+            print(f"   👤 Persons : {', '.join(persons)}")
+        if places:
+            print(f"   📍 Places  : {', '.join(places)}")
+        if years:
+            print(f"   📅 Years   : {', '.join(map(str, years))}")
+        if year_min is not None or year_max is not None:
+            print(f"   ⏳ Interval : {year_min}–{year_max}")
+
+    print(f"📑 Texte : {text_preview}")
 
 
 def main():
     data_root = Path("data")
-    corpus_jsonl = data_root / "chunks" / "standard" / "corpus_chunks.jsonl"
-    index_path = data_root / "embeddings" / "e5_large" / "index.faiss"
-    ids_path = data_root / "embeddings" / "e5_large" / "index_ids.json"
+    jsonl_path = data_root / "chunks" / "standard" / "corpus_chunks.jsonl"
+    index_dir = data_root / "embeddings" / "e5_large"
+    index_path = index_dir / "index.faiss"
+    ids_path = index_dir / "index_ids.json"
 
-    if not index_path.exists() or not ids_path.exists():
-        raise FileNotFoundError("Index FAISS ou fichier d'IDs introuvable. Lance d'abord build_faiss_index.py")
+    # Chargement corpus + index
+    records_by_id = load_corpus(jsonl_path)
+    index, ids_list = load_faiss_index(index_path, ids_path)
 
-    print("🚀 Chargement du modèle d'embedding...")
+    # Chargement modèle d'embedding
+    print("🧠 Chargement du modèle d'embedding pour les requêtes...")
     model, device = load_embedding_model(
         "intfloat/multilingual-e5-large",
         device="auto"
     )
-    embedder = Embedder(model, max_batch_size=8)
+    embedder = Embedder(model, max_batch_size=16)
 
-    print("📥 Chargement de l'index FAISS et des IDs...")
-    index, chunk_ids = load_index(index_path, ids_path)
-
-    print("📥 Chargement du corpus JSONL (pour retrouver les textes)...")
-    records = load_corpus_records(corpus_jsonl)
-
-    print("✅ Prêt pour la recherche sémantique.")
-    print("Tape une question historique (ou juste Enter pour quitter).")
+    print("\n✅ Prêt pour la recherche sémantique.")
+    print("   Tape une question en français (ou latin), ou 'q' pour quitter.")
 
     while True:
-        query = input("\n❓ Question : ").strip()
-        if not query:
-            print("🔚 Fin.")
+        try:
+            query = input("\n❓ Question > ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\n👋 Fin de session.")
             break
 
-        q_emb = np.array([embedder.embed_text(query)], dtype="float32")
-        top_k = 5
+        if not query:
+            continue
+        if query.lower() in {"q", "quit", "exit"}:
+            print("👋 Fin de session.")
+            break
 
-        scores, indices = index.search(q_emb, top_k)
-        scores = scores[0]
-        indices = indices[0]
+        # Embedding de la requête
+        q_emb = embedder.embed_texts([query])[0]
+        q_vec = np.array([q_emb], dtype="float32")
 
-        print(f"\n🔎 Top {top_k} résultats :")
-        for rank, (idx, score) in enumerate(zip(indices, scores), start=1):
-            if idx < 0:
+        # Recherche FAISS
+        k = 5
+        distances, indices = index.search(q_vec, k)
+
+        print(f"\n🔍 Top {k} résultats pour : {query!r}")
+        print(f"   indices bruts  : {indices[0].tolist()}")
+        print(f"   distances brutes : {distances[0].tolist()}")
+
+        shown = 0
+
+        for rank, (dist, idx) in enumerate(zip(distances[0], indices[0]), start=1):
+            if idx < 0 or idx >= len(ids_list):
+                print(f"   ⚠️ Index FAISS {idx} hors plage (0..{len(ids_list)-1})")
                 continue
-            cid = chunk_ids[idx]
-            rec = records.get(cid)
+
+            chunk_id = ids_list[idx]
+            rec = records_by_id.get(chunk_id)
             if not rec:
+                print(f"   ⚠️ chunk_id {chunk_id} introuvable dans corpus.")
                 continue
 
-            title = rec.get("title") or rec.get("doc_id")
-            pages = f"{rec.get('page_start')}–{rec.get('page_end')}"
-            text = rec.get("text", "")
-            preview = text[:400].replace("\n", " ")
+            score = 1.0 / (1.0 + float(dist))
+            pretty_print_result(rank, score, rec)
+            shown += 1
 
-            print(f"\n#{rank} — score={score:.3f}")
-            print(f"📘 {title}  (pages {pages})")
-            print(f"🧩 Chunk ID : {cid}")
-            print(f"📝 Aperçu : {preview}...")
-        print("-" * 80)
+        if shown == 0:
+            print("   ⚠️ Aucun résultat affichable (problème de mapping index ↔ corpus ?)")
 
 
 if __name__ == "__main__":
