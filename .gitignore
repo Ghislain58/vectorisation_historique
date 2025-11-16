@@ -1,0 +1,21 @@
+# Environnement virtuel
+venv/
+
+# Caches Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Fichiers temporaires / métadonnées Windows
+*Zone.Identifier
+
+# Données lourdes et locales
+mes_documents_historiques/
+vector_db_historique/
+debug_single/
+
+# Logs éventuels
+*.log
+
+# Divers
+wsl
