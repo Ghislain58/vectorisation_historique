@@ -5,31 +5,38 @@ import PyPDF2
 
 def list_pdf_documents(local_pdf_dir: Path, gallica_pdf_dir: Path) -> List[Dict]:
     """
-    Liste les PDFs à traiter (local + Gallica).
+    Liste les PDFs à traiter (local + Gallica), en parcourant récursivement
+    les sous-dossiers (articles, theses, cartulaires, lexiques, etc.).
     """
     documents = []
 
     if local_pdf_dir.exists():
-        for pdf_path in sorted(local_pdf_dir.glob("*.pdf")):
-            documents.append({
-                "doc_id": pdf_path.stem,
-                "title": pdf_path.stem,
-                "source": "local",
-                "ark": None,
-                "path": pdf_path,
-            })
+        # Parcours récursif : tous les .pdf dans local_pdf_dir et ses sous-dossiers
+        for pdf_path in sorted(local_pdf_dir.rglob("*.pdf")):
+            documents.append(
+                {
+                    "doc_id": pdf_path.stem,
+                    "title": pdf_path.stem,
+                    "source": "local",
+                    "ark": None,
+                    "path": pdf_path,
+                }
+            )
 
     if gallica_pdf_dir.exists():
-        for pdf_path in sorted(gallica_pdf_dir.glob("*.pdf")):
-            documents.append({
-                "doc_id": pdf_path.stem,
-                "title": pdf_path.stem,
-                "source": "gallica",
-                "ark": None,
-                "path": pdf_path,
-            })
+        for pdf_path in sorted(gallica_pdf_dir.rglob("*.pdf")):
+            documents.append(
+                {
+                    "doc_id": pdf_path.stem,
+                    "title": pdf_path.stem,
+                    "source": "gallica",
+                    "ark": None,
+                    "path": pdf_path,
+                }
+            )
 
     return documents
+
 
 
 def extract_pdf_text_by_page(pdf_path: Path) -> List[str]:
