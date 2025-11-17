@@ -10,7 +10,7 @@ import requests
 
 @dataclass
 class LLMConfig:
-    model: str = "llama3:8b"
+    model: str = "llama3:latest"
     base_url: str = "http://localhost:11434"
     temperature: float = 0.2
     max_tokens: int = 512

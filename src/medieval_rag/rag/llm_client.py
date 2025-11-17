@@ -1,3 +1,4 @@
+# src/medieval_rag/rag/llm_client.py
 from __future__ import annotations
 
 import json
@@ -9,7 +10,11 @@ import requests
 
 @dataclass
 class LLMConfig:
-    model: str = "llama3:8b"
+    """
+    Configuration minimale pour le client Ollama LLM.
+    Tu peux changer le modèle ici pour que tout le projet utilise le même.
+    """
+    model: str = "llama3:latest"
     base_url: str = "http://localhost:11434"
     temperature: float = 0.2
     max_tokens: int = 512
@@ -18,13 +23,17 @@ class LLMConfig:
 
 class OllamaLLMClient:
     """
-    Client léger pour appeler un modèle Ollama en mode chat.
-    Hypothèse : Ollama tourne déjà en local (ollama serve) et le modèle est présent.
+    Client léger pour envoyer des requêtes à Ollama via /api/chat.
+    Compatible avec les prompts système + utilisateur du pipeline RAG.
     """
 
     def __init__(self, config: Optional[LLMConfig] = None) -> None:
         self.config = config or LLMConfig()
+        print(f"🔍 LLM utilisé par le pipeline : {self.config.model}")
 
+    # ------------------------------------------------------------------
+    # Méthode principale : génération d’un texte via Ollama
+    # ------------------------------------------------------------------
     def generate(
         self,
         prompt: str,
@@ -34,9 +43,10 @@ class OllamaLLMClient:
         extra_params: Optional[Dict[str, Any]] = None,
     ) -> str:
         """
-        Envoie une requête à Ollama et renvoie le texte généré.
-        Utilise l'endpoint /api/chat pour bénéficier du format messages.
+        Appelle Ollama via /api/chat.
+        Retourne uniquement le contenu textuel généré.
         """
+
         url = f"{self.config.base_url.rstrip('/')}/api/chat"
 
         payload: Dict[str, Any] = {
@@ -47,32 +57,40 @@ class OllamaLLMClient:
             "messages": [],
         }
 
+        # Prompt système (optionnel mais essentiel pour le mode "historien strict")
         if system_prompt:
             payload["messages"].append({"role": "system", "content": system_prompt})
 
+        # Prompt utilisateur
         payload["messages"].append({"role": "user", "content": prompt})
 
+        # Permet de passer d’autres paramètres si besoin
         if extra_params:
             payload.update(extra_params)
 
+        # ------------------ Requête vers Ollama ------------------
         try:
             response = requests.post(url, json=payload, timeout=self.config.timeout)
         except requests.RequestException as e:
-            raise RuntimeError(f"Erreur de connexion à Ollama ({url}) : {e}") from e
+            raise RuntimeError(
+                f"Erreur de connexion à Ollama ({url}) : {e}"
+            ) from e
 
         if response.status_code != 200:
             raise RuntimeError(
                 f"Erreur HTTP {response.status_code} depuis Ollama : {response.text}"
             )
 
+        # ------------------ Analyse de la réponse ------------------
         try:
             data = response.json()
         except json.JSONDecodeError as e:
             raise RuntimeError(f"Réponse non JSON depuis Ollama : {response.text}") from e
 
-        # Format attendu pour /api/chat : {"message": {"role": \"...\", \"content\": \"...\"}}
+        # Format standard pour /api/chat
         message = data.get("message") or {}
         content = message.get("content")
+
         if not content:
             raise RuntimeError(f"Aucun contenu généré par Ollama : {data}")
 
