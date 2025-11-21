@@ -1,187 +1,232 @@
-📘 Vectorisation Historique & Moteur RAG Médiéval
+# 📘 Vectorisation Historique & Moteur RAG Médiéval  
 
-Pipeline complet pour construire un assistant médiéval basé sur un corpus scientifique (thèses, articles, PDF Gallica).
-Le système réalise :
+Système complet pour analyser un corpus scientifique médiéval (thèses, articles, actes, PDF Gallica) et fournir des réponses sourcées via un moteur **RAG** (Retrieval Augmented Generation).
 
-extraction de texte (PDF locaux + Gallica)
+🏛️ Objectif du projet
+Construire un assistant médiéval autonome, capable de :
 
-chunking structuré
+interroger un corpus scientifique médiéval,
 
-embeddings (E5-large)
+effectuer une recherche sémantique rigoureuse,
 
-index vectoriel FAISS
+citer précisément pages et documents,
 
-recherche sémantique
+limiter les hallucinations (FAISS + E5 + prompt historien strict),
 
-RAG (LLM API ou local via Ollama)
+fonctionner hors-ligne avec un LLM local via Ollama.
 
-Optimisé pour WSL + Python + GPU CUDA.
+Le moteur peut ensuite s’intégrer dans des projets numériques / artistiques (Symbioware / CogniLink, installations interactives, etc.).
 
-📁 Architecture du projet
+
+
+Optimisé pour :
+
+- WSL / Linux  
+- Python 3.10+  
+- CUDA  
+- Embeddings E5-large  
+- Index vectoriel FAISS  
+- LLM local via **Ollama**
+
+---
+
+
+🏗 Architecture du projet
+
 vectorisation_historique/
 │
 ├── src/medieval_rag/
-│   ├── ingestion/        # loaders PDF + chunker
-│   ├── enrichment/       # extraction d’entités
-│   ├── embeddings/       # modèle E5 + embedder
-│   └── rag/              # LLM client + pipeline RAG
+│   ├── ingestion/
+│   │    ├── loaders.py        # Extraction PDF page par page
+│   │    └── chunker.py        # Chunking structuré (1800 + overlap 200)
+│   │
+│   ├── enrichment/
+│   │    └── entities.py       # Entités médiévales : personnes, lieux, années
+│   │
+│   ├── embeddings/
+│   │    ├── model_loader.py   # Chargement E5-large (GPU/CPU)
+│   │    └── embedder.py       # Embeddings batchés (sécurité VRAM)
+│   │
+│   └── rag/
+│        ├── rag_pipeline.py   # Pipeline RAG complet (FAISS + LLM)
+│        └── llm_client.py     # Client Ollama (API chat locale)
 │
 ├── scripts/
-│   ├── build_corpus_jsonl.py
-│   ├── build_faiss_index.py
-│   ├── debug_search.py
-│   ├── inspect_entities.py
-│   └── rag_query_llm.py
+│   ├── build_corpus_jsonl.py  # Ingestion → chunks → embeddings → JSONL
+│   ├── build_faiss_index.py   # Construction index.faiss + index_ids.json
+│   ├── rag_query_pipeline.py  # Interface principale RAG (FAISS + LLM)
+│   ├── rag_query_llm.py       # Variante plus simple (LLM configurable)
+│   ├── debug_search.py        # Analyse FAISS avancée
+│   ├── inspect_entities.py    # Vérification lexique médiéval
+│   └── test_ollama_llm.py     # Test direct du modèle Ollama
 │
-├── data/
-│   ├── sources/          # PDF d'entrée (non versionnés)
-│   ├── chunks/           # corpus JSONL généré
-│   └── embeddings/       # index FAISS généré
+├── tests/
+│   ├── test_loader.py         # Test extraction PDF
+│   ├── test_chunker.py        # Test chunking
+│   └── test_embeddings.py     # Test embeddings E5
 │
-├── requirements.in
+├── legacy/                    # ANCIEN PIPELINE (non utilisé)
+│   ├── historical_vectorizer.py
+│   ├── vectorizer.py
+│   ├── analyse_*.py
+│   └── autres anciens scripts
+│
+├── data/                      # Non versionné (voir .gitignore)
+│   ├── sources/               # PDF bruts
+│   ├── chunks/                # corpus_chunks.jsonl (généré)
+│   └── embeddings/            # index.faiss + index_ids.json
+│
 ├── requirements.txt
 ├── requirements_freeze.txt
 ├── DEPENDENCIES.md
 └── README.md
-
 ⚙️ Installation
-1. Cloner le projet
+
 git clone git@github.com:Ghislain58/vectorisation_historique.git
 cd vectorisation_historique
 
-2. Installer l’environnement Python
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+📂 Préparer les sources (non versionnées)
+Déposer les PDF dans :
 
 
-(Vous pouvez utiliser requirements_freeze.txt pour une installation reproductible.)
+data/sources/local/pdf/        # Thèses, articles, PDF perso
+data/sources/bnf_gallica/pdf/  # PDF Gallica
+♻️ Reconstruction du corpus (FAISS + JSONL)
+1️⃣ Générer le corpus JSONL (chunks + entités + embeddings)
 
-♻️ Reconstruction des données (après un clone)
-
-Le dépôt ne contient pas :
-
-PDF
-
-corpus_chunks.jsonl
-
-index FAISS
-
-Ces fichiers doivent être générés à nouveau localement.
-
-1. Placer les PDF
-
-Déposer vos PDF dans :
-
-data/sources/local/pdf/       # Thèses, articles, sources personnelles
-data/sources/bnf_gallica/pdf/ # PDF Gallica (optionnel)
-
-2. Générer le corpus JSONL (chunks + embeddings)
 source venv/bin/activate
 python scripts/build_corpus_jsonl.py
-
-
 Sortie :
-
 data/chunks/standard/corpus_chunks.jsonl
+Ce JSONL contient pour chaque chunk :
 
-3. Construire l’index FAISS
+texte,
+
+numéro(s) de page,
+
+doc_id,
+
+métadonnées (source, titre…),
+
+entités (personnes / lieux / années),
+
+embedding E5-large.
+
+2️⃣ Construire l’index FAISS
+
 python scripts/build_faiss_index.py
-
-
 Sorties :
+
 
 data/embeddings/e5_large/index.faiss
 data/embeddings/e5_large/index_ids.json
+🔍 Vérifications et debug
+🔎 Test extraction PDF
 
-4. Tester la recherche sémantique
+python tests/test_loader.py
+🔎 Test chunking
+
+python tests/test_chunker.py
+🔎 Test embeddings E5-large
+
+python tests/test_embeddings.py
+🔎 Test LLM local (Ollama)
+
+python scripts/test_ollama_llm.py
+Affiche le modèle utilisé (ex : mistral:latest) et une réponse de test.
+
+🔎 Debug FAISS avancé
+
 python scripts/debug_search.py
+Permet de :
+
+inspecter les résultats FAISS,
+
+contrôler les distances,
+
+vérifier les pages et les textes,
+
+voir les entités détectées.
+
+🤖 Faire une requête RAG complète
+Commande principale
+
+python scripts/rag_query_pipeline.py \
+    -q "Quel rôle jouent les évêques de Clermont dans l'implantation des monastères d'Auvergne ?" \
+    --top-k 5
+Paramètres importants :
+
+-q / --query : ta question en langage naturel
+
+--top-k : nombre de chunks les plus pertinents à récupérer
+
+Pipeline exécuté :
+
+Embedding de la requête (intfloat/multilingual-e5-large)
+
+Recherche vectorielle FAISS
+
+Récupération des chunks JSONL correspondants
+
+Construction d’un prompt “historien strict, sourcé”
+
+Appel à Ollama via llm_client.py
+
+Affichage :
+
+RÉPONSE DU LLM
+
+SOURCES UTILISÉES (docs + pages + scores)
+
+🤖 Modèles locaux (Ollama)
+Lister les modèles :
 
 
-Permet de vérifier :
-
-les résultats de recherche FAISS
-
-la cohérence des textes
-
-la détection des entités
-
-5. Faire une requête RAG (LLM API ou local)
-python scripts/rag_query_llm.py
+ollama list
+Installer un modèle (exemples) :
 
 
-Pipeline :
+ollama pull llama3
+ollama pull mistral
+Le modèle utilisé par défaut dans le pipeline RAG est configuré dans :
 
-Embedding de la question
-
-Recherche FAISS
-
-Construction du contexte
-
-Appel à un LLM (OpenAI, Groq, Ollama…)
-
-Réponse historique sourcée et sans hallucinations
-
-🔌 Intégration LLM local (Ollama)
-
-Pour utiliser un modèle local :
-
-ollama pull llama3.1
-
-
-Puis configurer :
 
 src/medieval_rag/rag/llm_client.py
+Tu peux adapter :
 
-mode = "ollama"
-model = "llama3.1"
+model = "llama3:latest"
+ou
 
-🔍 Outils de vérification des entités
-python scripts/inspect_entities.py
-
-
-Permet d’améliorer :
-
-lexique des personnes
-
-lieux médiévaux
-
-années
-
-élimination des faux positifs (“dit”, “comte”, etc.)
-
-🧪 Tests rapides
-Générer un mini-corpus de test
-python scripts/build_corpus_jsonl.py --debug
-
-Interroger sans LLM
-python scripts/debug_search.py
+model = "mistral:latest"
 
 🛠 Workflow Git
-Ajouter des fichiers
-git add .
-git commit -m "feat: nouvelle fonctionnalité"
-git push
-
-
 Branches recommandées :
 
-main  → stable
-dev   → développement
+main → version stable
+
+dev → développement courant
+
 feat/... → nouvelles fonctionnalités
 
-🎯 Objectif du projet
+Exemple de cycle :
 
-Créer un assistant médiéval autonome, capable de :
 
-répondre à des questions historiques complexes
+git checkout dev
+git pull
 
-analyser des sources primaires et secondaires
+# travail...
 
-citer pages, documents, titres
+git add .
+git commit -m "feat: amélioration pipeline RAG"
+git push origin dev
+Merge vers main via Pull Request sur GitHub.
 
-fonctionner totalement hors-ligne
+🟤 Legacy
+Le dossier legacy/ contient l’ancien pipeline basé sur ChromaDB.
+Il est conservé pour mémoire (OCR, heuristiques, explorations),
 
-enrichir ton projet artistique / numérique Symbioware / CogniLink
+mais il n’est plus utilisé dans le pipeline FAISS actuel.
 
-✔️ Fin du README
