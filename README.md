@@ -2,6 +2,23 @@
 
 Système complet pour analyser un corpus scientifique médiéval (thèses, articles, actes, PDF Gallica) et fournir des réponses sourcées via un moteur **RAG** (Retrieval Augmented Generation).
 
+🏛️ Objectif du projet
+Construire un assistant médiéval autonome, capable de :
+
+interroger un corpus scientifique médiéval,
+
+effectuer une recherche sémantique rigoureuse,
+
+citer précisément pages et documents,
+
+limiter les hallucinations (FAISS + E5 + prompt historien strict),
+
+fonctionner hors-ligne avec un LLM local via Ollama.
+
+Le moteur peut ensuite s’intégrer dans des projets numériques / artistiques (Symbioware / CogniLink, installations interactives, etc.).
+
+
+
 Optimisé pour :
 
 - WSL / Linux  
@@ -35,20 +52,7 @@ python scripts/rag_query_pipeline.py \
 5. Debug FAISS avancé
 
 python scripts/debug_search.py
-🏛️ Objectif du projet
-Construire un assistant médiéval autonome, capable de :
 
-interroger un corpus scientifique médiéval,
-
-effectuer une recherche sémantique rigoureuse,
-
-citer précisément pages et documents,
-
-limiter les hallucinations (FAISS + E5 + prompt historien strict),
-
-fonctionner hors-ligne avec un LLM local via Ollama.
-
-Le moteur peut ensuite s’intégrer dans des projets numériques / artistiques (Symbioware / CogniLink, installations interactives, etc.).
 
 🏗 Architecture du projet
 
@@ -246,4 +250,5 @@ Merge vers main via Pull Request sur GitHub.
 🟤 Legacy
 Le dossier legacy/ contient l’ancien pipeline basé sur ChromaDB.
 Il est conservé pour mémoire (OCR, heuristiques, explorations),
+
 mais il n’est plus utilisé dans le pipeline FAISS actuel.
